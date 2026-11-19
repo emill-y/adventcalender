@@ -325,7 +325,6 @@
   const FKIND = { note: 'a sweet note', treat: 'a little treat', song: 'a song for you', plan: 'a plan together' }
   const localGifts = store.get(K + 'gifts')
   let serverGifts = []
-  let serverEnabled = false
 
   const allGifts = () => {
     const seen = new Set(), out = []
@@ -381,28 +380,7 @@
     }
   }
 
-  // base64url <-> unicode JSON, for gift links
-  const enc = (o) => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-  const dec = (s) => JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))))
   const realUrl = () => location.href.split('#')[0].split('?')[0].replace(/\/preview\/?$/, '/')
-  const pageUrl = realUrl
-
-  // A gift link was opened: tuck it into this calendar
-  ;(function receive() {
-    const m = location.hash.match(/^#gift=([\w-]+)/)
-    if (!m) return
-    if (PEEK) { location.replace(realUrl() + location.hash); return }
-    history.replaceState(null, '', location.href.split('#')[0])
-    let g = null
-    try { g = cleanGift(dec(m[1])) } catch {}
-    if (!g) return toast('Hmm, that gift link looks broken. Ask them to send it again?')
-    if (!localGifts.some((x) => x.id === g.id)) { localGifts.push(g); store.set(K + 'gifts', localGifts) }
-    renderBadges()
-    setTimeout(() => {
-      toast(g.secret ? `🎁 ${g.from} tucked a gift behind a secret door!` : `🎁 ${g.from} tucked a gift behind door ${g.day}!`, 5000)
-      burst(cells[g.day])
-    }, 700)
-  })()
 
   // Shared storage on Vercel (api/gifts.js), if it's connected
   // (skipped in sneak peek, so a preview never spoils real gifts)
@@ -410,7 +388,6 @@
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
       if (!data || !data.enabled) return
-      serverEnabled = true
       serverGifts = (data.gifts || []).map(cleanGift).filter(Boolean)
       renderBadges()
     })
@@ -427,7 +404,6 @@
   giver.querySelector('.close').addEventListener('click', () => giver.close())
   giver.addEventListener('click', (e) => { if (e.target === giver) giver.close() })
   const again = () => { form.reset(); $('form-err').textContent = ''; showStep('gift-form') }
-  $('send-another').addEventListener('click', again)
   $('saved-another').addEventListener('click', again)
 
   form.addEventListener('submit', async (e) => {
@@ -456,34 +432,20 @@
       return
     }
 
-    if (serverEnabled) {
-      const btn = $('wrap-btn'); btn.disabled = true; btn.textContent = 'Wrapping…'
-      try {
-        const r = await fetch('/api/gifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gift) })
-        if (!r.ok) throw new Error()
-        serverGifts.push(gift)
-        renderBadges()
-        $('saved-text').textContent = gift.secret
-          ? 'It’s hiding behind a secret door. Eisha will find it when that door opens!'
-          : `It’s waiting behind door ${gift.day}, and stays a surprise until December ${gift.day}.`
-        showStep('saved-step')
-        burst(giver.querySelector('.tag'))
-        return
-      } catch {
-        // storage hiccup: fall back to a gift link below
-      } finally { btn.disabled = false; btn.textContent = 'Wrap it up 🎁' }
-    }
-
-    const url = `${pageUrl()}#gift=${enc(gift)}`
-    const msg = `🎁 I tucked a surprise into your advent calendar! Tap to add it: ${url}`
-    $('send-text').href = `sms:?&body=${encodeURIComponent(msg)}`
-    $('send-email').href = `mailto:?subject=${encodeURIComponent('A gift for your advent calendar 🎄')}&body=${encodeURIComponent(msg)}`
-    $('send-share').hidden = !navigator.share
-    $('send-share').onclick = () => navigator.share({ title: 'A gift for your advent calendar', text: '🎁 I tucked a surprise into your advent calendar!', url }).catch(() => {})
-    $('send-copy').onclick = () => {
-      navigator.clipboard.writeText(url).then(() => toast('Link copied! Now paste it to Eisha ♡'), () => prompt('Copy this link:', url))
-    }
-    showStep('send-step')
+    const btn = $('wrap-btn'); btn.disabled = true; btn.textContent = 'Wrapping…'
+    try {
+      const r = await fetch('/api/gifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gift) })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || '')
+      serverGifts.push(gift)
+      renderBadges()
+      $('saved-text').textContent = gift.secret
+        ? 'It’s hiding behind a secret door. Eisha will find it when that door opens!'
+        : `It’s waiting behind door ${gift.day}, and stays a surprise until December ${gift.day}.`
+      showStep('saved-step')
+      burst(giver.querySelector('.tag'))
+    } catch (e2) {
+      err.textContent = e2.message || 'Oh no, the gift couldn’t be saved right now. Please try again in a minute.'
+    } finally { btn.disabled = false; btn.textContent = 'Wrap it up 🎁' }
   })
 
   renderBadges()

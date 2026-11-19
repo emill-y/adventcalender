@@ -20,17 +20,12 @@ write a note, treat, song, or plan and tuck it behind any door (or a secret
 one). A little red bow appears on that door, and what's inside stays hidden
 until the door opens.
 
-How a gift reaches the calendar depends on the setup:
-
-- **With shared storage on Vercel (recommended):** gifts save straight into the
-  calendar and show up on every device. To turn it on, open the project on
-  vercel.com → **Storage** → **Create / Connect** → **Upstash for Redis**
-  (free plan) → connect it to this project, then **redeploy**. That's it: Vercel
-  adds the `KV_REST_API_URL` / `KV_REST_API_TOKEN` settings that
-  `api/gifts.js` reads.
-- **Without storage** (or on GitHub Pages / opened as a file): the form turns
-  the gift into a link for the giver to text or email Eisha. Opening that link
-  tucks the gift into the calendar on that device.
+Gifts save straight into the calendar (shared across every device) through
+`api/gifts.js`, a tiny Vercel function. It needs free storage connected once:
+open the project on vercel.com → **Storage** → **Create / Connect** →
+**Upstash for Redis** (free plan) → connect it to this project, then
+**redeploy**. Vercel adds the `KV_REST_API_URL` / `KV_REST_API_TOKEN` settings
+the function reads. Until that's done, the form says the gift couldn't be saved.
 
 ## Run it
 

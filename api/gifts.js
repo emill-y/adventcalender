@@ -2,8 +2,7 @@
 // Uses Upstash Redis over its REST API (no npm packages needed).
 // Turn it on in Vercel: Project → Storage → connect "Upstash for Redis"
 // (free tier). Vercel then sets the env vars below automatically.
-// Without them, GET returns { enabled: false } and the site falls back
-// to sharing gifts as links.
+// Without them, gifts can't be saved and the form shows an error.
 
 const URL_ = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
 const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
@@ -43,7 +42,10 @@ function clean(g) {
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store')
-  if (!URL_ || !TOKEN) return res.status(200).json({ enabled: false, gifts: [] })
+  if (!URL_ || !TOKEN) {
+    if (req.method === 'GET') return res.status(200).json({ enabled: false, gifts: [] })
+    return res.status(503).json({ error: 'The calendar’s gift storage isn’t switched on yet. Ask Eisha to connect it!' })
+  }
 
   try {
     if (req.method === 'GET') {
