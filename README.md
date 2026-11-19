@@ -7,8 +7,11 @@ cozy plan).
 - Each door unlocks on its day in December (Dec 1–24). Today's door glows.
 - Opened doors stay open (saved in your browser).
 - Tap **I did it ♡** on a gift card to keep track of the joys you've done.
-- Add `?peek` to the URL to unlock every door for a sneak peek, e.g.
-  `index.html?peek`. Use "close all the doors" at the bottom to reset.
+- **Sneak peek link:** `your-site.vercel.app/preview` (or `?peek` on any host)
+  unlocks every door so people can try it out before December. It's a
+  sandbox: doors opened and test gifts added there stay in the preview and
+  never show up in the real calendar, and real family gifts are never shown
+  in the preview, so nothing gets spoiled.
 
 ## Gifts from family 🎁
 

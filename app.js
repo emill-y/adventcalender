@@ -18,13 +18,16 @@
 
   // ---------------- state ----------------
   const params = new URLSearchParams(location.search)
-  const PEEK = params.has('peek')
+  // Sneak peek: /preview (or ?peek) unlocks every door in a sandbox.
+  // It keeps its own opened/done/gift state and never touches the real calendar.
+  const PEEK = params.has('peek') || /\/preview\/?$/.test(location.pathname)
+  const K = PEEK ? 'advent26-peek-' : 'advent26-'
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem(k)) || [] } catch { return [] } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} },
   }
-  const opened = new Set(store.get('advent26-opened'))
-  const done = new Set(store.get('advent26-done'))
+  const opened = new Set(store.get(K + 'opened'))
+  const done = new Set(store.get(K + 'done'))
 
   const now = new Date()
   const month = now.getMonth(), day = now.getDate()
@@ -219,7 +222,7 @@
     cell.classList.add('open')
     cell.classList.remove('today')
     opened.add(n)
-    store.set('advent26-opened', [...opened])
+    store.set(K + 'opened', [...opened])
     burst(cell)
     updateProgress()
     setTimeout(() => showGift(n), 650)
@@ -261,7 +264,7 @@
   $('gift-did').addEventListener('click', () => {
     if (done.has(current)) done.delete(current)
     else { done.add(current); burst($('gift-did'), 14) }
-    store.set('advent26-done', [...done])
+    store.set(K + 'done', [...done])
     syncDid()
     updateProgress()
   })
@@ -271,7 +274,7 @@
 
   $('reset').addEventListener('click', () => {
     opened.clear(); done.clear()
-    store.set('advent26-opened', []); store.set('advent26-done', [])
+    store.set(K + 'opened', []); store.set(K + 'done', [])
     Object.values(cells).forEach((c) => c.classList.remove('open'))
     if (todayN) cells[todayN].classList.add('today')
     updateProgress()
@@ -320,7 +323,7 @@
 
   // ---------------- gifts from family ----------------
   const FKIND = { note: 'a sweet note', treat: 'a little treat', song: 'a song for you', plan: 'a plan together' }
-  const localGifts = store.get('advent26-gifts')
+  const localGifts = store.get(K + 'gifts')
   let serverGifts = []
   let serverEnabled = false
 
@@ -381,17 +384,19 @@
   // base64url <-> unicode JSON, for gift links
   const enc = (o) => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   const dec = (s) => JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))))
-  const pageUrl = () => location.href.split('#')[0].replace(/[?&]peek\b[^&]*/, '').replace(/\?$/, '')
+  const realUrl = () => location.href.split('#')[0].split('?')[0].replace(/\/preview\/?$/, '/')
+  const pageUrl = realUrl
 
   // A gift link was opened: tuck it into this calendar
   ;(function receive() {
     const m = location.hash.match(/^#gift=([\w-]+)/)
     if (!m) return
+    if (PEEK) { location.replace(realUrl() + location.hash); return }
     history.replaceState(null, '', location.href.split('#')[0])
     let g = null
     try { g = cleanGift(dec(m[1])) } catch {}
     if (!g) return toast('Hmm, that gift link looks broken. Ask them to send it again?')
-    if (!localGifts.some((x) => x.id === g.id)) { localGifts.push(g); store.set('advent26-gifts', localGifts) }
+    if (!localGifts.some((x) => x.id === g.id)) { localGifts.push(g); store.set(K + 'gifts', localGifts) }
     renderBadges()
     setTimeout(() => {
       toast(g.secret ? `🎁 ${g.from} tucked a gift behind a secret door!` : `🎁 ${g.from} tucked a gift behind door ${g.day}!`, 5000)
@@ -400,7 +405,8 @@
   })()
 
   // Shared storage on Vercel (api/gifts.js), if it's connected
-  fetch('api/gifts', { cache: 'no-store' })
+  // (skipped in sneak peek, so a preview never spoils real gifts)
+  if (!PEEK) fetch('/api/gifts', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
       if (!data || !data.enabled) return
@@ -440,10 +446,20 @@
       secret, kind: f.kind.value, title: f.title.value, text: f.text.value, link,
     })
 
+    if (PEEK) {
+      localGifts.push(gift)
+      store.set(K + 'gifts', localGifts)
+      renderBadges()
+      $('saved-text').textContent = `Sneak peek test: it’s behind door ${gift.day} on this device only, and won’t be sent to Eisha. Use the real calendar link to send real gifts!`
+      showStep('saved-step')
+      burst(giver.querySelector('.tag'))
+      return
+    }
+
     if (serverEnabled) {
       const btn = $('wrap-btn'); btn.disabled = true; btn.textContent = 'Wrapping…'
       try {
-        const r = await fetch('api/gifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gift) })
+        const r = await fetch('/api/gifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gift) })
         if (!r.ok) throw new Error()
         serverGifts.push(gift)
         renderBadges()
@@ -475,7 +491,17 @@
   // ---------------- header status ----------------
   ;(function status() {
     const el = $('status')
-    if (PEEK) { el.textContent = 'Sneak peek mode: every door is unlocked ✦'; return }
+    if (PEEK) {
+      document.body.classList.add('peek')
+      el.innerHTML = 'Sneak peek: every door is unlocked, just for testing ✦'
+      const bar = document.createElement('div')
+      bar.className = 'peek-bar'
+      bar.innerHTML = '<span>👀 Sneak peek mode. Nothing here changes the real calendar.</span>'
+      const a = document.createElement('a'); a.href = realUrl(); a.textContent = 'Go to the real calendar →'
+      bar.append(a)
+      document.body.prepend(bar)
+      return
+    }
     if (month === 11 && day <= 24) el.textContent = `Day ${day}: today’s door is glowing ✦`
     else if (month === 11) el.textContent = 'Merry Christmas! Every door is open ♡'
     else if (month === 0) el.textContent = 'Happy New Year! Revisit any door you like ♡'
