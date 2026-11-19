@@ -33,7 +33,6 @@
     <svg class="garland" aria-hidden="true"></svg>
     <p class="eyebrow">December 2026</p>
     <h1>Eisha’s <em>Advent</em> Calendar</h1>
-    <p class="sub">24 little doors of joy. Open one each day.</p>
     <p class="status" id="status"></p>
   </header>
 
@@ -43,6 +42,13 @@
       <p class="progress" id="progress"></p>
       <button class="link-btn" id="reset" type="button">close all the doors</button>
     </div>
+
+    <section class="family">
+      <svg class="family-bow" viewBox="0 0 60 34" aria-hidden="true"><path d="M30 17 C14 0 2 6 8 16 C12 24 24 20 30 17 C36 20 48 24 52 16 C58 6 46 0 30 17Z" fill="#c94a4a" stroke="#8f2f2f" stroke-width="1.5"/><path d="M30 17 l-9 16 M30 17 l9 16" stroke="#c94a4a" stroke-width="5" stroke-linecap="round"/><circle cx="30" cy="17" r="5" fill="#a8383a"/></svg>
+      <h2>Tuck a gift behind a door</h2>
+      <p>Family &amp; friends: add your own little surprise for Eisha. It stays hidden until its door opens.</p>
+      <button class="btn" id="add-gift" type="button">Add a gift ♡</button>
+    </section>
   </main>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -57,9 +63,77 @@
       <h2 class="tag-title" id="gift-title"></h2>
       <p class="tag-artist" id="gift-artist"></p>
       <p class="tag-text" id="gift-text"></p>
+      <div class="family-notes" id="family-notes"></div>
       <div class="tag-actions">
         <a class="btn" id="gift-action" target="_blank" rel="noopener"></a>
         <button class="btn ghost" id="gift-did" type="button" aria-pressed="false"></button>
+      </div>
+    </article>
+  </dialog>
+
+  <dialog id="giver" aria-labelledby="giver-title">
+    <article class="tag form-tag">
+      <button class="close" type="button" aria-label="Close">&times;</button>
+      <div class="ribbon" aria-hidden="true"></div>
+
+      <form id="gift-form" class="step" novalidate>
+        <p class="tag-day">a gift for Eisha</p>
+        <h2 class="tag-title" id="giver-title">Tuck something behind a door</h2>
+
+        <label>Who's it from?
+          <input name="from" maxlength="40" placeholder="Mom &amp; Dad" required />
+        </label>
+
+        <div class="row">
+          <label>Which door?
+            <select name="day">
+              <option value="any">Surprise me (any door)</option>
+            </select>
+          </label>
+          <label>What is it?
+            <select name="kind">
+              <option value="note">A sweet note</option>
+              <option value="treat">A little treat</option>
+              <option value="song">A song</option>
+              <option value="plan">A plan together</option>
+            </select>
+          </label>
+        </div>
+
+        <label>Title
+          <input name="title" maxlength="80" placeholder="Hot cocoa date with us!" required />
+        </label>
+        <label>Your message
+          <textarea name="text" maxlength="600" rows="4" placeholder="We're so proud of you. This one's on us…"></textarea>
+        </label>
+        <label>Link <span class="opt">(optional: a song, a recipe, a gift card…)</span>
+          <input name="link" type="url" maxlength="400" placeholder="https://open.spotify.com/…" />
+        </label>
+
+        <p class="form-err" id="form-err" role="alert"></p>
+        <div class="tag-actions"><button class="btn" type="submit" id="wrap-btn">Wrap it up 🎁</button></div>
+      </form>
+
+      <div class="step" id="saved-step" hidden>
+        <div class="wrapped" aria-hidden="true"></div>
+        <p class="tag-day">all tucked in!</p>
+        <h2 class="tag-title">Your gift is in the calendar</h2>
+        <p class="tag-text" id="saved-text"></p>
+        <div class="tag-actions"><button class="btn ghost" id="saved-another" type="button">Add another gift</button></div>
+      </div>
+
+      <div class="step" id="send-step" hidden>
+        <div class="wrapped" aria-hidden="true"></div>
+        <p class="tag-day">all wrapped!</p>
+        <h2 class="tag-title">Now send it to Eisha</h2>
+        <p class="tag-text">Send this link to Eisha. Tapping it tucks your gift into the calendar, and what's inside stays a secret until its door opens.</p>
+        <div class="tag-actions">
+          <button class="btn" id="send-share" type="button">Send gift ↗</button>
+          <a class="btn ghost" id="send-text">Text it</a>
+          <a class="btn ghost" id="send-email">Email it</a>
+          <button class="btn ghost" id="send-copy" type="button">Copy link</button>
+        </div>
+        <button class="link-btn" id="send-another" type="button">add another gift</button>
       </div>
     </article>
   </dialog>

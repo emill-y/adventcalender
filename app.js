@@ -247,6 +247,7 @@
       a.textContent = act.label || 'Open ↗'
     }
     a.hidden = !(act.song || act.place || act.url)
+    renderFamilyNotes(n)
     syncDid()
     dlg.showModal()
   }
@@ -277,12 +278,12 @@
   })
 
   let toastTimer
-  function toast(msg) {
+  function toast(msg, ms = 2800) {
     const t = $('toast')
     t.textContent = msg
     t.classList.add('show')
     clearTimeout(toastTimer)
-    toastTimer = setTimeout(() => t.classList.remove('show'), 2800)
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms)
   }
 
   function burst(el, count = 26) {
@@ -316,6 +317,160 @@
     $('progress').textContent = done.size ? `${msg} · ${done.size} joy${done.size === 1 ? '' : 's'} done ♡` : msg
     $('reset').hidden = opened.size === 0
   }
+
+  // ---------------- gifts from family ----------------
+  const FKIND = { note: 'a sweet note', treat: 'a little treat', song: 'a song for you', plan: 'a plan together' }
+  const localGifts = store.get('advent26-gifts')
+  let serverGifts = []
+  let serverEnabled = false
+
+  const allGifts = () => {
+    const seen = new Set(), out = []
+    for (const g of [...serverGifts, ...localGifts]) if (g && !seen.has(g.id)) { seen.add(g.id); out.push(g) }
+    return out
+  }
+  const giftsFor = (n) => allGifts().filter((g) => g.day === n)
+
+  function cleanGift(g) {
+    const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
+    const day = Number(g && g.day)
+    const link = str(g && g.link, 400)
+    const out = {
+      id: str(g && g.id, 40),
+      from: str(g && g.from, 40),
+      day: Number.isInteger(day) && day >= 1 && day <= 24 ? day : 0,
+      secret: Boolean(g && g.secret),
+      kind: FKIND[g && g.kind] ? g.kind : 'note',
+      title: str(g && g.title, 80),
+      text: str(g && g.text, 600),
+      link: /^https?:\/\//i.test(link) ? link : '',
+    }
+    return out.id && out.from && out.title && out.day ? out : null
+  }
+
+  function renderBadges() {
+    const days = new Set(allGifts().map((g) => g.day))
+    Object.entries(cells).forEach(([n, c]) => {
+      const has = days.has(Number(n))
+      c.classList.toggle('has-gift', has)
+      c.setAttribute('aria-label', `December ${n}${has ? ', with a gift from family' : ''}`)
+    })
+  }
+
+  function renderFamilyNotes(n) {
+    const box = $('family-notes')
+    box.replaceChildren()
+    for (const g of giftsFor(n)) {
+      const el = document.createElement('div')
+      el.className = 'fnote'
+      const from = document.createElement('p'); from.className = 'fnote-from'; from.textContent = `From ${g.from} ♡`
+      const kind = document.createElement('span'); kind.className = 'tag-kind'; kind.textContent = FKIND[g.kind]
+      const h = document.createElement('h3'); h.textContent = g.title
+      el.append(from, kind, h)
+      if (g.text) { const p = document.createElement('p'); p.className = 'fnote-text'; p.textContent = g.text; el.append(p) }
+      if (g.link) {
+        const a = document.createElement('a')
+        a.className = 'btn ghost small'; a.href = g.link; a.target = '_blank'; a.rel = 'noopener'
+        a.textContent = /spotify|music\.apple|youtu|soundcloud/i.test(g.link) ? '▶  Play it' : 'Open link ↗'
+        el.append(a)
+      }
+      box.append(el)
+    }
+  }
+
+  // base64url <-> unicode JSON, for gift links
+  const enc = (o) => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const dec = (s) => JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))))
+  const pageUrl = () => location.href.split('#')[0].replace(/[?&]peek\b[^&]*/, '').replace(/\?$/, '')
+
+  // A gift link was opened: tuck it into this calendar
+  ;(function receive() {
+    const m = location.hash.match(/^#gift=([\w-]+)/)
+    if (!m) return
+    history.replaceState(null, '', location.href.split('#')[0])
+    let g = null
+    try { g = cleanGift(dec(m[1])) } catch {}
+    if (!g) return toast('Hmm, that gift link looks broken. Ask them to send it again?')
+    if (!localGifts.some((x) => x.id === g.id)) { localGifts.push(g); store.set('advent26-gifts', localGifts) }
+    renderBadges()
+    setTimeout(() => {
+      toast(g.secret ? `🎁 ${g.from} tucked a gift behind a secret door!` : `🎁 ${g.from} tucked a gift behind door ${g.day}!`, 5000)
+      burst(cells[g.day])
+    }, 700)
+  })()
+
+  // Shared storage on Vercel (api/gifts.js), if it's connected
+  fetch('api/gifts', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      if (!data || !data.enabled) return
+      serverEnabled = true
+      serverGifts = (data.gifts || []).map(cleanGift).filter(Boolean)
+      renderBadges()
+    })
+    .catch(() => {})
+
+  // The "add a gift" form
+  const giver = $('giver')
+  const form = $('gift-form')
+  const daySel = form.elements.day
+  for (let i = 1; i <= 24; i++) daySel.add(new Option(`Door ${i}  (Dec ${i})`, String(i)))
+  const showStep = (id) => giver.querySelectorAll('.step').forEach((el) => (el.hidden = el.id !== id))
+
+  $('add-gift').addEventListener('click', () => { showStep('gift-form'); $('form-err').textContent = ''; giver.showModal() })
+  giver.querySelector('.close').addEventListener('click', () => giver.close())
+  giver.addEventListener('click', (e) => { if (e.target === giver) giver.close() })
+  const again = () => { form.reset(); $('form-err').textContent = ''; showStep('gift-form') }
+  $('send-another').addEventListener('click', again)
+  $('saved-another').addEventListener('click', again)
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const f = form.elements
+    const err = $('form-err')
+    const link = f.link.value.trim()
+    if (!f.from.value.trim()) return (err.textContent = 'Add your name so Eisha knows who it’s from ♡')
+    if (!f.title.value.trim()) return (err.textContent = 'Give your gift a little title.')
+    if (link && !/^https?:\/\//i.test(link)) return (err.textContent = 'Links should start with https://')
+    err.textContent = ''
+    const secret = f.day.value === 'any'
+    const gift = cleanGift({
+      id: Math.random().toString(36).slice(2, 12) + Date.now().toString(36),
+      from: f.from.value, day: secret ? 1 + Math.floor(Math.random() * 24) : Number(f.day.value),
+      secret, kind: f.kind.value, title: f.title.value, text: f.text.value, link,
+    })
+
+    if (serverEnabled) {
+      const btn = $('wrap-btn'); btn.disabled = true; btn.textContent = 'Wrapping…'
+      try {
+        const r = await fetch('api/gifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gift) })
+        if (!r.ok) throw new Error()
+        serverGifts.push(gift)
+        renderBadges()
+        $('saved-text').textContent = gift.secret
+          ? 'It’s hiding behind a secret door. Eisha will find it when that door opens!'
+          : `It’s waiting behind door ${gift.day}, and stays a surprise until December ${gift.day}.`
+        showStep('saved-step')
+        burst(giver.querySelector('.tag'))
+        return
+      } catch {
+        // storage hiccup: fall back to a gift link below
+      } finally { btn.disabled = false; btn.textContent = 'Wrap it up 🎁' }
+    }
+
+    const url = `${pageUrl()}#gift=${enc(gift)}`
+    const msg = `🎁 I tucked a surprise into your advent calendar! Tap to add it: ${url}`
+    $('send-text').href = `sms:?&body=${encodeURIComponent(msg)}`
+    $('send-email').href = `mailto:?subject=${encodeURIComponent('A gift for your advent calendar 🎄')}&body=${encodeURIComponent(msg)}`
+    $('send-share').hidden = !navigator.share
+    $('send-share').onclick = () => navigator.share({ title: 'A gift for your advent calendar', text: '🎁 I tucked a surprise into your advent calendar!', url }).catch(() => {})
+    $('send-copy').onclick = () => {
+      navigator.clipboard.writeText(url).then(() => toast('Link copied! Now paste it to Eisha ♡'), () => prompt('Copy this link:', url))
+    }
+    showStep('send-step')
+  })
+
+  renderBadges()
 
   // ---------------- header status ----------------
   ;(function status() {
